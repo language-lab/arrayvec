@@ -924,12 +924,13 @@ where
 
 /// A draining iterator for `ArrayVec`.
 pub struct Drain<'a, T: 'a, const CAP: usize> {
-    /// Index of tail to preserve
+    /// 指向删除范围的头部
     tail_start: usize,
-    /// Length of tail
+    /// 指向删除范围的尾部
     tail_len: usize,
-    /// Current remaining range to remove
+    /// 删除范围的迭代器
     iter: slice::Iter<'a, T>,
+    /// 指向 arrayvec 的指针
     vec: *mut ArrayVec<T, CAP>,
 }
 

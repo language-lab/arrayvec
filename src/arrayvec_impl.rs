@@ -40,6 +40,7 @@ pub(crate) trait ArrayVecImpl {
     }
 
     fn try_push(&mut self, element: Self::Item) -> Result<(), CapacityError<Self::Item>> {
+        // 边界检查
         if self.len() < Self::CAPACITY {
             unsafe {
                 self.push_unchecked(element);
@@ -53,15 +54,20 @@ pub(crate) trait ArrayVecImpl {
     unsafe fn push_unchecked(&mut self, element: Self::Item) {
         let len = self.len();
         debug_assert!(len < Self::CAPACITY);
+        // invariant:  array 还有空间
+        // 将指针 offset 到尾部, 然后写入 element
         ptr::write(self.as_mut_ptr().add(len), element);
+        // 设置新的 len, 以便下一次写入时计算新的位置的指针
         self.set_len(len + 1);
     }
 
     fn pop(&mut self) -> Option<Self::Item> {
+        // 边界检查
         if self.len() == 0 {
             return None;
         }
         unsafe {
+            // 只更新数组 len 的大小, 不会实际的删除内存
             let new_len = self.len() - 1;
             self.set_len(new_len);
             Some(ptr::read(self.as_ptr().add(new_len)))
