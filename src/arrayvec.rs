@@ -611,6 +611,7 @@ impl<T, const CAP: usize> ArrayVec<T, CAP> {
         // the hole, and the vector length is restored to the new length.
         //
         let len = self.len();
+        // 通过模式匹配设置安全的边界
         let start = match range.start_bound() {
             Bound::Unbounded => 0,
             Bound::Included(&i) => i,
@@ -629,18 +630,21 @@ impl<T, const CAP: usize> ArrayVec<T, CAP> {
         let len = self.len();
 
         // bounds check happens here (before length is changed!)
+        // 创建一个指向内部 xs 的常量指针, 编译器会自动处理类型转换, 范围在 drain 处理过了
         let range_slice: *const _ = &self[start..end];
 
         // Calling `set_len` creates a fresh and thus unique mutable references, making all
         // older aliases we created invalid. So we cannot call that function.
+        // 不能调用 set_len, 会导致创建一个新的  mut self, 而 set_len 是 unsafe 的, 调用
+        // 时需要 unsafe 语法块, 这样导致编译器无法检测这个问题, 从而导致别名失效.
         self.len = start as LenUint;
 
         unsafe {
             Drain {
                 tail_start: end,
                 tail_len: len - end,
-                iter: (*range_slice).iter(),
-                vec: self as *mut _,
+                iter: (*range_slice).iter(), // 很巧妙的继续使用 arrayvec 的 iter
+                vec: self as *mut _, // 持有指向 arrayvec 的指针
             }
         }
     }
@@ -889,6 +893,7 @@ impl<T, const CAP: usize> ExactSizeIterator for IntoIter<T, CAP> { }
 impl<T, const CAP: usize> Drop for IntoIter<T, CAP> {
     fn drop(&mut self) {
         // panic safety: Set length to 0 before dropping elements.
+        // 当前迭代到的 index
         let index = self.index;
         let len = self.v.len();
         unsafe {
@@ -971,8 +976,14 @@ impl<'a, T: 'a, const CAP: usize> Drop for Drain<'a, T, CAP> {
         // len is currently 0 so panicking while dropping will not cause a double drop.
 
         // exhaust self first
+        // 通过迭代器获取元素, 然后自动 drop 保障了内存释放
         while let Some(_) = self.next() { }
 
+        // [0                [start, end]        len]
+        // tail_start = end
+        // tail_len = len - end
+        // 这段代码的意义是将 end..len 的元素移动到 start.. 开始, 其实就是覆盖掉已经删除
+        // 的 start..end 的内存区域.
         if self.tail_len > 0 {
             unsafe {
                 let source_vec = &mut *self.vec;
